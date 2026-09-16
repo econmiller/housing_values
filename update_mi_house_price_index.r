@@ -1,8 +1,6 @@
-# Install required packages if you don't have them
-# install.packages(c("quantmod", "xts", "dplyr", "tidyr", "knitr"))
+# Install required packages if not already installed
+# install.packages(c("dplyr", "tidyr", "knitr"))
 
-library(quantmod)
-library(xts)
 library(dplyr)
 library(tidyr)
 library(knitr)
@@ -23,52 +21,91 @@ series_map <- c(
   "ATNHPIUS12980Q"  = "Battle Creek, MI (MSA)"
 )
 
-# 2. Fetch data from FRED and calculate Year-over-Year percent change
-fetch_yoy <- function(code) {
-  # getSymbols pulls directly into the global environment or returns it
-  xts_data <- getSymbols(code, src = "FRED", auto.assign = FALSE)
+# 2. Function to fetch data via public FRED CSV URLs (No API Key needed)
+fetch_fred_csv <- function(code, name) {
+  url <- paste0("https://fred.stlouisfed.org/graph/fredgraph.csv?id=", code)
+  df <- read.csv(url, stringsAsFactors = FALSE)
+  colnames(df)[2] <- "val"
+  df$val <- suppressWarnings(as.numeric(df$val))
+  df$Date <- as.Date(df$DATE)
   
-  # Calculate percent change from 4 quarters ago: ((Xt - Xt-4) / Xt-4) * 100
-  yoy_change <- (xts_data - lag(xts_data, 4)) / lag(xts_data, 4) * 100
-  return(yoy_change)
+  df <- df %>%
+    arrange(Date) %>%
+    mutate(yoy = (val - lag(val, 4)) / lag(val, 4) * 100) %>%
+    select(Date, yoy)
+  
+  colnames(df)[2] <- name
+  return(df)
 }
 
-# Combine all series into a single list and merge
-series_list <- lapply(names(series_map), fetch_yoy)
-combined_xts <- do.call(merge, series_list)
-colnames(combined_xts) <- unname(series_map)
+# Fetch all series and merge them together by Date
+dfs <- mapply(fetch_fred_csv, names(series_map), series_map, SIMPLIFY = FALSE)
+combined_df <- Reduce(function(x, y) full_join(x, y, by = "Date"), dfs)
 
-# Convert to a data frame
-df <- data.frame(Date = index(combined_xts), coredata(combined_xts))
+# Filter for the last 3 years of quarterly data (12 quarters)
+combined_df <- combined_df %>% 
+  filter(!is.na(Date)) %>%
+  arrange(desc(Date))
 
-# 3. Filter for the last 3 years of quarterly data
-# Convert Date to standard Date object, arrange descending to get latest, then filter
-df$Date <- as.Date(df$Date)
-df <- df %>% arrange(desc(Date))
+df_recent <- head(combined_df, 12)
 
-# Keep the most recent 12 quarters (3 years)
-df_recent <- head(df, 12)
-
-# Format the Date column nicely (e.g., "2025 Q4")
-# Since FRED dates usually map to the end of the quarter:
+# Helper function to format date into "YYYY Q#" format
 get_quarter_str <- function(date_val) {
   y <- format(date_val, "%Y")
   q <- ceiling(as.numeric(format(date_val, "%m")) / 3)
   paste0(y, " Q", q)
 }
+
 df_recent$Quarter <- sapply(df_recent$Date, get_quarter_str)
 
-# Reorder columns to put Quarter first and drop raw Date
-df_table <- df_recent %>%
-  select(Quarter, everything(), -Date) %>%
-  mutate(across(where(is.numeric), ~ round(., 2))) # Round to 2 decimal places
+# 3. Transpose the table: Regions as rows, Quarters as columns
+df_for_pivot <- df_recent %>% select(-Date)
 
-# 4. Generate HTML Table markup
-# You can customize the table classes to match your MSU/Bootstrap web styles if needed
-html_table <- kable(df_table, format = "html", 
-                    table.attr = "class='table table-striped table-bordered'",
-                    col.names = c("Quarter", unname(series_map)))
+df_long <- df_for_pivot %>%
+  pivot_longer(cols = -Quarter, names_to = "Region", values_to = "YOY")
 
-# Save to an HTML snippet file that your website can pull or display
+df_transposed <- df_long %>%
+  pivot_wider(names_from = Quarter, values_from = YOY) %>%
+  mutate(across(where(is.numeric), ~ round(., 2)))
+
+# Sort quarter columns chronologically
+quarter_cols <- sort(setdiff(names(df_transposed), "Region"))
+df_transposed <- df_transposed %>% select(Region, all_of(quarter_cols))
+
+# 4. Generate Styled HTML Table using MSU Colors (Spartan Green #18453b and zebra tint #f4f7f5)
+html_table <- paste0(
+  "<div style='overflow-x:auto;'>\n",
+  "<style>\n",
+  "  .msu-housing-table {\n",
+  "    width: 100%;\n",
+  "    border-collapse: collapse;\n",
+  "    font-family: Arial, sans-serif;\n",
+  "    font-size: 14px;\n",
+  "    color: #333333;\n",
+  "    margin-bottom: 20px;\n",
+  "  }\n",
+  "  .msu-housing-table th {\n",
+  "    background-color: #18453b;\n",
+  "    color: #ffffff;\n",
+  "    text-align: left;\n",
+  "    padding: 10px 12px;\n",
+  "    border: 1px solid #18453b;\n",
+  "  }\n",
+  "  .msu-housing-table td {\n",
+  "    padding: 9px 12px;\n",
+  "    border: 1px solid #dcdcdc;\n",
+  "  }\n",
+  "  .msu-housing-table tr:nth-child(even) {\n",
+  "    background-color: #f4f7f5;\n",
+  "  }\n",
+  "  .msu-housing-table tr:hover {\n",
+  "    background-color: **#e8ede9**;\n",
+  "  }\n",
+  "</style>\n",
+  kable(df_transposed, format = "html", table.attr = "class='msu-housing-table'", col.names = c("Region / Area", quarter_cols)),
+  "\n</div>"
+)
+
+# Save to HTML snippet file
 writeLines(html_table, "housing_table.html")
-print("Housing table generated successfully!")
+print("Transposed MSU styled housing table generated successfully!")
