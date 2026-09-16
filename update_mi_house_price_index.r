@@ -116,7 +116,7 @@ html_table <- paste0(
   "  }\n",
   "</style>\n",
   "<div class='table-subtitle'>All measures are in percent change, year-over-year</div>\n",
-  kable(df_transposed, format = "html", table.attr = "class='msu-housing-table'", col.names = c("Region / Area", quarter_cols)),\n",
+  kable(df_transposed, format = "html", table.attr = "class='msu-housing-table'", col.names = c("Region / Area", quarter_cols)),"\n",
   "<div class='table-footer'>Source: Realtor.com via FRED: St. Louis Federal Reserve</div>\n",
   "</div>"
 )
