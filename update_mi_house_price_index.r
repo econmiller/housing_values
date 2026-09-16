@@ -23,7 +23,6 @@ fetch_fred_csv <- function(code, name) {
   url <- paste0("https://fred.stlouisfed.org/graph/fredgraph.csv?id=", code)
   df <- read.csv(url, stringsAsFactors = FALSE)
   
-  # Ensure columns match expectations (FRED returns DATE and value)
   colnames(df)[1] <- "DATE"
   colnames(df)[2] <- "val"
   
@@ -61,7 +60,7 @@ get_quarter_str <- function(date_val) {
 
 df_recent$Quarter <- sapply(df_recent$Date, get_quarter_str)
 
-# 3. Transpose the table: Regions as rows, Quarters as columns
+# 3. Transpose the table: Regions as rows, Quarters as columns (Rounded to 1 decimal place)
 df_for_pivot <- df_recent %>% select(-Date)
 
 df_long <- df_for_pivot %>%
@@ -69,23 +68,22 @@ df_long <- df_for_pivot %>%
 
 df_transposed <- df_long %>%
   pivot_wider(names_from = Quarter, values_from = YOY) %>%
-  mutate(across(where(is.numeric), ~ round(., 2)))
+  mutate(across(where(is.numeric), ~ round(., 1)))
 
 # Sort quarter columns chronologically
 quarter_cols <- sort(setdiff(names(df_transposed), "Region"))
 df_transposed <- df_transposed %>% select(Region, all_of(quarter_cols))
 
-# 4. Generate Styled HTML Table using MSU Colors (Spartan Green #18453b and zebra tint #f4f7f5)
+# 4. Generate Styled HTML Table using MSU Colors with Subtitle and Footer Notes
 html_table <- paste0(
-  "<div style='overflow-x:auto;'>\n",
+  "<div style='overflow-x:auto; font-family: Arial, sans-serif;'>\n",
   "<style>\n",
   "  .msu-housing-table {\n",
   "    width: 100%;\n",
   "    border-collapse: collapse;\n",
-  "    font-family: Arial, sans-serif;\n",
   "    font-size: 14px;\n",
   "    color: #333333;\n",
-  "    margin-bottom: 20px;\n",
+  "    margin-bottom: 8px;\n",
   "  }\n",
   "  .msu-housing-table th {\n",
   "    background-color: #18453b;\n",
@@ -104,11 +102,25 @@ html_table <- paste0(
   "  .msu-housing-table tr:hover {\n",
   "    background-color: #e8ede9;\n",
   "  }\n",
+  "  .table-subtitle {\n",
+  "    font-size: 13px;\n",
+  "    color: #555555;\n",
+  "    margin-bottom: 10px;\n",
+  "    font-weight: bold;\n",
+  "  }\n",
+  "  .table-footer {\n",
+  "    font-size: 11px;\n",
+  "    color: #666666;\n",
+  "    font-style: italic;\n",
+  "    margin-top: 5px;\n",
+  "  }\n",
   "</style>\n",
-  kable(df_transposed, format = "html", table.attr = "class='msu-housing-table'", col.names = c("Region / Area", quarter_cols)),
-  "\n</div>"
+  "<div class='table-subtitle'>All measures are in percent change, year-over-year</div>\n",
+  kable(df_transposed, format = "html", table.attr = "class='msu-housing-table'", col.names = c("Region / Area", quarter_cols)),\n",
+  "<div class='table-footer'>Source: Realtor.com via FRED: St. Louis Federal Reserve</div>\n",
+  "</div>"
 )
 
 # Save to HTML snippet file
 writeLines(html_table, "housing_table.html")
-print("Transposed MSU styled housing table generated successfully!")
+print("Updated MSU styled housing table generated successfully!")
