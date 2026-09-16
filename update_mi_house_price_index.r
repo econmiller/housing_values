@@ -76,7 +76,7 @@ df_transposed <- df_transposed %>% select(Region, all_of(quarter_cols))
 
 # 4. Generate Styled HTML Table using MSU Colors with Subtitle and Footer Notes
 html_table <- paste0(
-  "<div style='max-width: 700px; width: 100%; overflow-x: auto; margin: 0 auto; font-family: Arial, sans-serif;'>\n",
+  "<div style='max-width: 920px; width: 100%; overflow-x: auto; margin: 0 auto; font-family: Arial, sans-serif;'>\n",
   "<style>\n",
   "  .msu-housing-table {\n",
   "    width: 100%;\n",
