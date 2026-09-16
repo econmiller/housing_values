@@ -30,7 +30,7 @@ jobs:
             knitr
 
       - name: Run R script
-        run: Rscript update_housing_table.R
+        run: Rscript update_mi_house_price_index.r
 
       - name: Commit and push changes if table updated
         run: |
