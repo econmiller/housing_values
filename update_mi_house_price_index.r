@@ -1,6 +1,3 @@
-# Install required packages if not already installed
-# install.packages(c("dplyr", "tidyr", "knitr"))
-
 library(dplyr)
 library(tidyr)
 library(knitr)
@@ -21,15 +18,21 @@ series_map <- c(
   "ATNHPIUS12980Q"  = "Battle Creek, MI (MSA)"
 )
 
-# 2. Function to fetch data via public FRED CSV URLs (No API Key needed)
+# 2. Robust function to fetch data via public FRED CSV URLs
 fetch_fred_csv <- function(code, name) {
   url <- paste0("https://fred.stlouisfed.org/graph/fredgraph.csv?id=", code)
   df <- read.csv(url, stringsAsFactors = FALSE)
-  colnames(df)[2] <- "val"
-  df$val <- suppressWarnings(as.numeric(df$val))
-  df$Date <- as.Date(df$DATE)
   
+  # Ensure columns match expectations (FRED returns DATE and value)
+  colnames(df)[1] <- "DATE"
+  colnames(df)[2] <- "val"
+  
+  df$val <- suppressWarnings(as.numeric(df$val))
+  df$Date <- as.Date(df$DATE, format = "%Y-%m-%d")
+  
+  # Calculate Year-over-Year percent change (4 quarters prior)
   df <- df %>%
+    filter(!is.na(Date)) %>%
     arrange(Date) %>%
     mutate(yoy = (val - lag(val, 4)) / lag(val, 4) * 100) %>%
     select(Date, yoy)
@@ -99,7 +102,7 @@ html_table <- paste0(
   "    background-color: #f4f7f5;\n",
   "  }\n",
   "  .msu-housing-table tr:hover {\n",
-  "    background-color: **#e8ede9**;\n",
+  "    background-color: #e8ede9;\n",
   "  }\n",
   "</style>\n",
   kable(df_transposed, format = "html", table.attr = "class='msu-housing-table'", col.names = c("Region / Area", quarter_cols)),
